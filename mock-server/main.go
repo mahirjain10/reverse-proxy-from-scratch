@@ -74,123 +74,104 @@ func initData() []Data {
 	}
 }
 
-func handlerGetMethod(w http.ResponseWriter, r *http.Request, data []Data) {
-	id := r.URL.Query().Get("id")
-	sendCacheControl := r.URL.Query().Get("cache-control")
-	RequestETag := r.Header.Get("If-None-Match")
-	fmt.Println(r.URL.RawQuery)
-	var fetchedResult *Data
-	message := "Data not found"
-	statusCode := http.StatusNotFound
-	fmt.Println("Printing Request Etag",RequestETag)
-	fmt.Println("Printing Request Etag len",len(RequestETag))
-	if len(RequestETag) != 0 {
-		fmt.Println("IN IF")
-		for i := range data {
-			if data[i].ID == id {
-				fetchedResult = &data[i]
-				message = "Data Retrieved Successfully"
-				statusCode = http.StatusOK
-				break
-			}
-		}
-		t := fetchedResult.UpdatedAt
-		b := t.AppendFormat(nil, time.RFC3339Nano) // converts time to []byte
-		etag := md5.Sum(b)
-		etagStr := fmt.Sprintf(`"%x"`, etag)
-		fmt.Printf("Printing ETag String IN IF %x\n", etagStr)
-		if etagStr == RequestETag {
-			fmt.Println("HELL YEAH")
-			w.Header().Set("ETag", etagStr)
-			w.WriteHeader(304)
-			return
-			// w.Write([]byte("Nothing Changed"))
-		}
-	}
 
-	for i := range data {
-		if data[i].ID == id {
-			fetchedResult = &data[i]
-			message = "Data Retrieved Successfully"
-			statusCode = http.StatusOK
-			break
-		}
-	}
-
-	responseData := ResponseData{
-		Message:    message,
-		StatusCode: statusCode,
-		Data:       fetchedResult,
-	}
-
-	jsonData, err := json.Marshal(responseData)
+func writeJSONResponse(w http.ResponseWriter, statusCode int, payload any) {
+	jsonData, err := json.Marshal(payload)
 	if err != nil {
 		http.Error(w, "Error marshaling JSON", http.StatusInternalServerError)
 		return
 	}
 
-	if (strings.Contains(sendCacheControl, constant.MUST_REVALIDATE) && strings.Contains(sendCacheControl, constant.MAX_AGE)) ||
-		(strings.Contains(sendCacheControl, constant.STALE_WHILE_REVALIDATE) && strings.Contains(sendCacheControl, constant.MAX_AGE)) ||
-		(strings.Contains(sendCacheControl, constant.STALE_IF_ERROR) && strings.Contains(sendCacheControl, constant.MAX_AGE)) {
-		fmt.Println("IN CACHE CONTROL IF")
-		w.Header().Set("Cache-Control", sendCacheControl)
-	}
-
-	t := fetchedResult.UpdatedAt
-	b := t.AppendFormat(nil, time.RFC3339Nano) // converts time to []byte
-	etag := md5.Sum(b)
-	etagStr := fmt.Sprintf(`"%x"`, etag)
-	fmt.Printf("Printing Etag post string conv %x\n", etagStr)
-	w.Header().Set("ETag", etagStr)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 
-	_, err = w.Write(jsonData)
-	if err != nil {
+	if _, err := w.Write(jsonData); err != nil {
 		log.Println("Error writing response:", err)
 	}
 }
 
-func handlePutMethod(w http.ResponseWriter, r *http.Request, data []Data) {
+func generateETag(t time.Time) string {
+	b := t.AppendFormat(nil, time.RFC3339Nano)
+	hash := md5.Sum(b)
+	return fmt.Sprintf(`"%x"`, hash)
+}
+
+func handlerGetMethod(w http.ResponseWriter, r *http.Request, data []Data) {
 	id := r.URL.Query().Get("id")
-	sendCacheControl := r.URL.Query().Get("cache-control")
 
 	var fetchedResult *Data
-	message := "Data not found, Didn't update Data"
-	statusCode := http.StatusNotFound
-
 	for i := range data {
 		if data[i].ID == id {
-			data[i].UpdatedAt = time.Now()
 			fetchedResult = &data[i]
-			message = "Data Updated Successfully"
-			statusCode = http.StatusOK
 			break
 		}
 	}
 
-	responseData := ResponseData{
-		Message:    message,
-		StatusCode: statusCode,
-		Data:       fetchedResult,
-	}
-
-	jsonData, err := json.Marshal(responseData)
-	if err != nil {
-		http.Error(w, "Error marshaling JSON", http.StatusInternalServerError)
+	if fetchedResult == nil {
+		response := ResponseData{
+			Message:    "Data not found",
+			StatusCode: http.StatusNotFound,
+			Data:       nil,
+		}
+		writeJSONResponse(w, http.StatusNotFound, response)
 		return
 	}
 
-	if sendCacheControl == "true" {
+	etag := generateETag(fetchedResult.UpdatedAt)
+	if r.Header.Get("If-None-Match") == etag {
+		w.Header().Set("ETag", etag)
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+
+	sendCacheControl := r.URL.Query().Get("cache-control")
+	if (strings.Contains(sendCacheControl, constant.MUST_REVALIDATE) && strings.Contains(sendCacheControl, constant.MAX_AGE)) ||
+		(strings.Contains(sendCacheControl, constant.STALE_WHILE_REVALIDATE) && strings.Contains(sendCacheControl, constant.MAX_AGE)) ||
+		(strings.Contains(sendCacheControl, constant.STALE_IF_ERROR) && strings.Contains(sendCacheControl, constant.MAX_AGE)) {
+		w.Header().Set("Cache-Control", sendCacheControl)
+	}
+
+	w.Header().Set("ETag", etag)
+	response := ResponseData{
+		Message:    "Data Retrieved Successfully",
+		StatusCode: http.StatusOK,
+		Data:       fetchedResult,
+	}
+	writeJSONResponse(w, http.StatusOK, response)
+}
+
+func handlePutMethod(w http.ResponseWriter, r *http.Request, data []Data) {
+	id := r.URL.Query().Get("id")
+
+	var fetchedResult *Data
+	for i := range data {
+		if data[i].ID == id {
+			data[i].UpdatedAt = time.Now()
+			fetchedResult = &data[i]
+			break
+		}
+	}
+
+	if fetchedResult == nil {
+		response := ResponseData{
+			Message:    "Data not found, Didn't update Data",
+			StatusCode: http.StatusNotFound,
+			Data:       nil,
+		}
+		writeJSONResponse(w, http.StatusNotFound, response)
+		return
+	}
+
+	if sendCacheControl := r.URL.Query().Get("cache-control"); sendCacheControl == "true" {
 		w.Header().Set("Cache-Control", "must-revalidate, max-age=3600")
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
 
-	_, err = w.Write(jsonData)
-	if err != nil {
-		log.Println("Error writing response:", err)
+	response := ResponseData{
+		Message:    "Data Updated Successfully",
+		StatusCode: http.StatusOK,
+		Data:       fetchedResult,
 	}
+	writeJSONResponse(w, http.StatusOK, response)
 }
 
 func main() {
@@ -211,13 +192,12 @@ func main() {
 		case http.MethodPut:
 			handlePutMethod(w, r, data)
 		default:
-			http.Error(w, "Only GET and PUT methods allowed", http.StatusMethodNotAllowed)
+			http.Error(w, "Only GET and PUT methods are allowed", http.StatusMethodNotAllowed)
 		}
 	})
 
 	fmt.Println("Mock server started on port", *port)
-	err := http.ListenAndServe(*port, nil)
-	if err != nil {
+	if err := http.ListenAndServe(*port, nil); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 }
