@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mahirjain10/reverse-proxy/constant" // Assuming this contains your constants
+	"github.com/mahirjain10/reverse-proxy/constant"
 	"github.com/redis/go-redis/v9"
 )
 
-// --- Structs for Data Management ---
+
 
 type CacheControl struct {
 	cacheType      string
@@ -59,7 +59,6 @@ func NewProxy(origin string, healthCheckMap map[string]bool, cm *CacheManager) *
 	}
 }
 
-// ServeHTTP implements the http.Handler interface and contains the core proxy logic.
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -85,7 +84,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		cachedData = *fetchedData
 
-	} else if err != nil { // Handle other Redis errors
+	} else if err != nil { 
 		http.Error(w, "cache error: "+err.Error(), http.StatusInternalServerError)
 		return
 
@@ -116,7 +115,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// --- Write Response to Client ---
+	
 	for k, v := range cachedData.Headers {
 		w.Header().Set(k, v)
 	}
@@ -124,8 +123,6 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(cachedData.Body))
 }
-
-// --- Helper methods for Proxy ---
 
 func (p *Proxy) getHealthyOriginPort() string {
 	for port, isHealthy := range p.healthCheckMap {
@@ -200,7 +197,7 @@ func (p *Proxy) fetchOnCacheMiss(ctx context.Context, key string, r *http.Reques
 	}
 }
 
-// For Must ReValidate
+
 func (p *Proxy) revalidateSynchronously(ctx context.Context, key string, currentData *Cache, r *http.Request) (*Cache, error) {
 	portToUse := p.getHealthyOriginPort()
 	if portToUse == "" {
@@ -247,7 +244,7 @@ func (p *Proxy) revalidateSynchronously(ctx context.Context, key string, current
 	}
 }
 
-// revalidateAsynchronously triggers a background revalidation and immediately returns.
+
 func (p *Proxy) revalidateAsynchronously(key string, currentData *Cache, r *http.Request) {
 	portToUse := p.getHealthyOriginPort()
 	if portToUse == "" {
