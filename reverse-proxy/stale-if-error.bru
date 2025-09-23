@@ -1,0 +1,16 @@
+meta {
+  name: stale-if-error
+  type: http
+  seq: 4
+}
+
+get {
+  url: http://localhost:3000/data?id=9z8y7x6w-5v4u-3210-9876-54321fedcba9&cache-control=stale-if-error=30,max-age=5
+  body: none
+  auth: none
+}
+
+query {
+  id: 9z8y7x6w-5v4u-3210-9876-54321fedcba9
+  cache-control: stale-if-error
+}
