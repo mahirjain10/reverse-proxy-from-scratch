@@ -1,0 +1,16 @@
+meta {
+  name: must-revalidate-5-seconds-client-2
+  type: http
+  seq: 3
+}
+
+get {
+  url: http://localhost:3000/data?id=9z8y7x6w-5v4u-3210-9876-54321fedcba9&cache-control=must-revalidate,max-age=10
+  body: none
+  auth: none
+}
+
+query {
+  id: 9z8y7x6w-5v4u-3210-9876-54321fedcba9
+  cache-control: must-revalidate,max-age=10
+}

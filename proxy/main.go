@@ -26,6 +26,7 @@ type CacheControl struct {
 }
 
 type Cache struct {
+	CachType string 			   `json:"cache_type"`
 	Body         string            `json:"body"`
 	Headers      map[string]string `json:"headers"`
 	StoredAt     int64             `json:"stored_at"`
@@ -75,14 +76,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err == redis.Nil {
 		didCacheHit = false
 		fmt.Println("Cache miss, fetching from origin...")
-		time.Sleep(5 * time.Second)
-
-		fetchedData, err := p.fetchOnCacheMiss(ctx, key, r)
+		fetchedData, err ,didWeHitCache:= p.fetchOnCacheMiss(ctx, key, r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
 		cachedData = *fetchedData
+		didCacheHit = didWeHitCache
 
 	} else if err != nil { 
 		http.Error(w, "cache error: "+err.Error(), http.StatusInternalServerError)
@@ -97,14 +97,19 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		isExpired := time.Now().Unix() > cachedData.StoredAt+int64(cachedData.MaxAge)
-		staleWhileRevalidate := strings.Contains(cachedData.Headers["Cache-Control"], constant.STALE_WHILE_REVALIDATE)
-		staleWhileRevalidateExpiry := time.Now().Unix() > cachedData.StoredAt+int64(cachedData.MaxAge)+int64(cachedData.UseStaleUpto)
-
-		if isExpired && staleWhileRevalidate && !staleWhileRevalidateExpiry {
+		isUseStaleUptoExpired := time.Now().Unix() > cachedData.StoredAt+int64(cachedData.MaxAge)+int64(cachedData.UseStaleUpto)
+		
+		// If the max age (freshness) expired and STALE_WHILE_REVALIDATE 
+		// Call the Origin Async
+		if isExpired && cachedData.CachType == constant.STALE_WHILE_REVALIDATE {
 			p.revalidateAsynchronously(key, &cachedData, r)
 		}
 
-		if isExpired && !staleWhileRevalidate || staleWhileRevalidate && staleWhileRevalidateExpiry {
+		// If cache expired && MUST_REVALIDATE
+		// If isUseStaleUptoExpired (max age + stale upto) && STALE_IF_ERROR
+		// If isUseStaleUptoExpired (max age + stale upto) && STALE_WHILE_REVALIDATE
+		// Call the Origin Sync 
+		if isExpired && cachedData.CachType == constant.MUST_REVALIDATE || isUseStaleUptoExpired && cachedData.CachType == constant.STALE_IF_ERROR || isUseStaleUptoExpired && cachedData.CachType == constant.STALE_WHILE_REVALIDATE{
 			fmt.Println("Cache is expired and must be revalidated synchronously.")
 			revalidatedData, err := p.revalidateSynchronously(ctx, key, &cachedData, r)
 			if err != nil {
@@ -134,9 +139,11 @@ func (p *Proxy) getHealthyOriginPort() string {
 }
 
 
-func (p *Proxy) fetchOnCacheMiss(ctx context.Context, key string, r *http.Request) (*Cache, error) {
+func (p *Proxy) fetchOnCacheMiss(ctx context.Context, key string, r *http.Request) (*Cache, error,bool) {
 	myChan := make(chan struct{})
 	actualChan, loaded := p.cacheManager.leaderMap.LoadOrStore(key, myChan)
+	fmt.Println("Is did we load in cache miss : ",loaded)
+	fmt.Println("If no then channel in cache miss : ",actualChan)
 
 	if !loaded { // I am the leader
 		fmt.Println("I am the leader for a cache miss.")
@@ -144,24 +151,33 @@ func (p *Proxy) fetchOnCacheMiss(ctx context.Context, key string, r *http.Reques
 			close(actualChan.(chan struct{}))
 			p.cacheManager.leaderMap.Delete(key)
 		}()
-
+		
+		// Check for healthy port
 		portToUse := p.getHealthyOriginPort()
+		
+		// If no healthy port found ,send error 
 		if portToUse == "" {
-			return nil, fmt.Errorf("no healthy origin server available")
+			return nil, fmt.Errorf("no healthy origin server available"),false
 		}
 		fullOrigin := p.origin + portToUse
 
+				time.Sleep(10 * time.Second)
+		fmt.Println("10 seconds finished...")
+		// Fetch from Origin
 		body, _, headers, fetchErr := fetchFromOrigin(fullOrigin, "", r)
 		if fetchErr != nil {
-			return nil, fetchErr
+			return nil, fetchErr,false
 		}
 
+		// Get the value of cache-control header to parse
 		var cacheControlStruct CacheControl
-		if ccHeader, ok := headers["Cache-Control"]; ok {
-			cacheControlStruct.getDataFromHeaderString(ccHeader)
+		if ccHeaderValue, ok := headers["Cache-Control"]; ok {
+			cacheControlStruct.getCacheControlDataFromHeader(ccHeaderValue)
 		}
 
+		// Ready the data to save into redis
 		cacheToStore := &Cache{
+			CachType: 	cacheControlStruct.cacheType,
 			Body:         body,
 			Headers:      headers,
 			StoredAt:     time.Now().Unix(),
@@ -173,9 +189,10 @@ func (p *Proxy) fetchOnCacheMiss(ctx context.Context, key string, r *http.Reques
 		if marshalErr != nil {
 			log.Printf("Error marshaling cache data: %v", marshalErr)
 		} else {
+			fmt.Println("Saving data in Redis for cache MISS : ",loaded)
 			p.cacheManager.redisClient.Set(ctx, key, cacheJSON, 0)
 		}
-		return cacheToStore, nil
+		return cacheToStore, nil,true
 
 	} else { // I am a follower
 		fmt.Println("Another request is already fetching for this cache miss. I will wait.")
@@ -184,15 +201,15 @@ func (p *Proxy) fetchOnCacheMiss(ctx context.Context, key string, r *http.Reques
 			fmt.Println("Follower unblocked! Re-fetching from cache after miss.")
 			value, err := p.cacheManager.redisClient.Get(ctx, key).Result()
 			if err != nil {
-				return nil, fmt.Errorf("failed to retrieve cache after leader's fetch")
+				return nil, fmt.Errorf("failed to retrieve cache after leader's fetch"),false
 			}
 			var cachedData Cache
 			if unmarshalErr := json.Unmarshal([]byte(value), &cachedData); unmarshalErr != nil {
-				return nil, fmt.Errorf("failed to unmarshal cache for follower")
+				return nil, fmt.Errorf("failed to unmarshal cache for follower"),false
 			}
-			return &cachedData, nil
+			return &cachedData, nil,false
 		case <-ctx.Done():
-			return nil, fmt.Errorf("request timed out while waiting for initial cache fill")
+			return nil, fmt.Errorf("request timed out while waiting for initial cache fill"),false
 		}
 	}
 }
@@ -294,20 +311,30 @@ func getCacheKey(origin string, r *http.Request) string {
 	return "cache:" + r.Method + ":" + origin + path + "?" + r.URL.RawQuery
 }
 
-func (cache *CacheControl) getDataFromHeaderString(headerValue string) {
+func (cache *CacheControl) getCacheControlDataFromHeader(headerValue string) {
 	parts := strings.Split(headerValue, ",")
 	for _, part := range parts {
 		trimmedPart := strings.TrimSpace(part)
+		isStaleWhileRevalidateDir := strings.HasPrefix(trimmedPart, "stale-while-revalidate=")
+		staleIfErrorDir := strings.HasPrefix(trimmedPart,"stale-if-error=")
 		if strings.Contains(trimmedPart, constant.MUST_REVALIDATE) {
-			cache.cacheType = trimmedPart
-		} else if strings.HasPrefix(trimmedPart, "max-age=") {
+			// Save Must Revalidate
+			cache.cacheType = constant.MUST_REVALIDATE
+		} else if strings.HasPrefix(trimmedPart, "max-age=") { 
+			// Save Max Age
 			value, err := strconv.Atoi(strings.Split(trimmedPart, "=")[1])
 			if err == nil {
 				cache.maxAge = value
 			}
-		} else if strings.HasPrefix(trimmedPart, "stale-while-revalidate=") {
+		} else if  staleIfErrorDir || isStaleWhileRevalidateDir { 
 			value, err := strconv.Atoi(strings.Split(trimmedPart, "=")[1])
 			if err == nil {
+				if (isStaleWhileRevalidateDir) {
+					cache.cacheType = constant.STALE_WHILE_REVALIDATE
+				}else{
+					cache.cacheType = constant.STALE_IF_ERROR
+					
+				}
 				cache.serveStaleUpto = value
 			}
 		}

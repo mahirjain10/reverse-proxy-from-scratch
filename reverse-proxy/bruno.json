@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "reverse-proxy",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

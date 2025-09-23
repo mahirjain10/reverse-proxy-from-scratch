@@ -13,7 +13,7 @@ MOCK2_PORT := :8002
 ORIGIN     := http://localhost:
 PORTS      := 8001,8002
 
-.PHONY: all proxy mock1 mock2 mock-servers run clean
+.PHONY: all proxy mock1 mock2 mock-servers run clean test integration
 
 all: run
 
@@ -41,3 +41,7 @@ clean:
 	@echo "Stopping all running servers..."
 	@pkill -f $(PROXY_SRC) || true
 	@pkill -f $(MOCK_SRC) || true
+
+integration:
+	@echo "Running integration test..."
+	go test ./__tests__ -v
