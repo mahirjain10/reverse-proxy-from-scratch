@@ -1,16 +1,16 @@
 meta {
   name: stale-while-revalidate-client-1
   type: http
-  seq: 6
+  seq: 4
 }
 
 get {
-  url: http://localhost:3000/data?id=9z8y7x6w-5v4u-3210-9876-54321fedcba9&cache-control=stale-while-revalidate=30,max-age=10
+  url: http://localhost:3000/data?id=9z8y7x6w-5v4u-3210-9876-54321fedcba9&cache-control=stale-while-revalidate=10,max-age=10
   body: none
   auth: none
 }
 
 query {
   id: 9z8y7x6w-5v4u-3210-9876-54321fedcba9
-  cache-control: stale-while-revalidate
+  cache-control: stale-while-revalidate=10,max-age=10
 }

@@ -42,6 +42,3 @@ clean:
 	@pkill -f $(PROXY_SRC) || true
 	@pkill -f $(MOCK_SRC) || true
 
-integration:
-	@echo "Running integration test..."
-	go test ./__tests__ -v

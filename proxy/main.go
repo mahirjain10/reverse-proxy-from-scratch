@@ -30,7 +30,6 @@ type Cache struct {
 	StoredAt     int64             `json:"stored_at"`
 	MaxAge       int               `json:"max_age"`
 	UseStaleUpto int               `json:"use_stale_upto"`
-	IsCacheStale bool              `json:"is_cache_stale"`
 }
 
 type CacheManager struct {
@@ -392,7 +391,6 @@ func revalidateAndUpdateCache(ctx context.Context, redisClient *redis.Client, ke
 		cachedData.Headers = newHeaders
 		cachedData.StoredAt = time.Now().Unix()
 	}
-
 	updatedCacheJSON, marshalErr := json.Marshal(cachedData)
 	if marshalErr != nil {
 		return fmt.Errorf("error marshaling updated cache data: %w", marshalErr)
