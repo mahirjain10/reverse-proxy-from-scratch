@@ -203,7 +203,7 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
   ![Cache Miss](assets/cache_miss.png)
 
 - **Demo Video**: Watch the reverse proxy handle requests and caching.
-  [View reverse_proxy.mp4](assets/reverse_proxy.mp4)
+  [View reverse_proxy.mp4](assets/reverse_proxy_demo.mp4)
 
 ---
 
