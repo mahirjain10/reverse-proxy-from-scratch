@@ -8,11 +8,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/mahirjain10/reverse-proxy/constant"
 	"github.com/redis/go-redis/v9"
 )
@@ -69,7 +71,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	value, err := p.cacheManager.redisClient.Get(ctx, key).Result()
 
-	// --- CACHE MISS ---
+	// CACHE MISS 
 	if err == redis.Nil {
 		didCacheHit = false
 		fmt.Println("Cache miss, fetching from origin...")
@@ -85,7 +87,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "cache error: "+err.Error(), http.StatusInternalServerError)
 		return
 
-	} else { // --- CACHE HIT ---
+	} else { // CACHE HIT 
 		fmt.Println("Cache hit")
 		if unmarshalErr := json.Unmarshal([]byte(value), &cachedData); unmarshalErr != nil {
 			log.Printf("Failed to unmarshal cache: %v", unmarshalErr)
@@ -402,7 +404,6 @@ func revalidateAndUpdateCache(ctx context.Context, redisClient *redis.Client, ke
 func CheckHealth(ports []string, origin string, healthCheckMap map[string]bool) {
 	for _, port := range ports {
 		fullOrigin := origin + port
-		// Use a timeout for health checks
 		client := http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Get(fullOrigin + "/health-check")
 		if err != nil || resp.StatusCode != http.StatusOK {
@@ -415,6 +416,10 @@ func CheckHealth(ports []string, origin string, healthCheckMap map[string]bool) 
 }
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file")
+	}
 	originPorts := flag.String("ports", "8000", "Comma-separated list of origin server ports")
 	origin := flag.String("origin", "http://localhost:", "Default Origin server URL")
 	flag.Parse()
@@ -439,7 +444,7 @@ func main() {
 		}
 	}()
 
-	redisClient, err := initializeRedisClient("redis://localhost:6379/0")
+	redisClient, err := initializeRedisClient(os.Getenv("REDIS_URL"))
 	if err != nil {
 		log.Fatal(err)
 	}

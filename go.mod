@@ -3,7 +3,7 @@ module github.com/mahirjain10/reverse-proxy
 go 1.24.3
 
 require (
-	github.com/bsm/redislock v0.9.4
+	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.14.0
 )
 
