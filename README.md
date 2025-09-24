@@ -1,4 +1,3 @@
-````markdown
 # Proxy Cache Server with Mock Origin
 
 This is a toy project to explore how a **reverse proxy** works, complete with HTTP caching and mock origin servers. It’s built to test caching directives like `must-revalidate`, `stale-while-revalidate`, and `stale-if-error`. The proxy caches responses in **Redis**, handles TTLs, validates freshness, and manages concurrent requests efficiently using a **leader–follower pattern**. Perfect for learning the ins and outs of reverse proxy caching!
@@ -43,8 +42,6 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
   ```http
   x-cache-status: HIT | MISS
   ```
-````
-
 - Runs periodic **health checks** on origin servers.
 
 ### Mock Origin Server
@@ -52,12 +49,8 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
 - `GET /data`: Returns cached data with an **ETag**.
 - `PUT /data`: Updates the `updated_at` field to simulate data changes.
 - `GET /health-check`: Returns health status.
-- **ETag Generation**:
-
-  - Hashes only the `updated_at` field for efficiency.
-
+- **ETag Generation**: Hashes only the `updated_at` field for efficiency.
 - Responds with:
-
   - `200 OK` for new or updated data.
   - `304 Not Modified` if unchanged since the last ETag.
 
@@ -75,7 +68,7 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
 1. **Clone the repo**
 
    ```bash
-   git clone https://github.com/yourname/proxy-cache-server.git
+   git clone [https://github.com/yourname/proxy-cache-server.git](https://github.com/yourname/proxy-cache-server.git)
    cd proxy-cache-server
    ```
 
@@ -92,13 +85,10 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
    ```
 
 4. **Run via Makefile**
-
    ```bash
    make run port=3000
    ```
-
    Or specify a custom port:
-
    ```bash
    make run port=5000
    ```
@@ -110,13 +100,10 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
 - Set `max-age` and `use_stale_upto` dynamically via the `cache-control` query string.
 
 - Example:
-
   ```bash
   http://localhost:3000/data?id=123&cache-control=stale-while-revalidate=15,max-age=5
   ```
-
 - `max-age=5`: Cache is fresh for 5 seconds.
-
 - `stale-while-revalidate=15`: Stale data can be served for 15 seconds while revalidating in the background.
 
 ---
@@ -136,7 +123,6 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
    - Stores in Redis: headers, body, `cache_type`, `max-age`, `use_stale_upto`.
 
 3. For subsequent requests:
-
    - Checks Redis for cached data.
    - Serves directly on a **cache hit**.
    - Follows fetch rules on a **cache miss** or expired cache.
@@ -155,7 +141,6 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
 ### Asynchronous Fetch
 
 - **Stale-While-Revalidate**: If `max-age` expires but `use_stale_upto` is valid:
-
   - Serves stale data immediately.
   - Fetches fresh data in the background to update the cache.
 
@@ -174,7 +159,6 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
   - Adds header: `x-cache-status: MISS`
 
 - **ETag Handling**:
-
   - Stores ETag with each cache entry.
   - Sends `If-None-Match` header during revalidation.
   - Mock server responds with `304` (unchanged) or `200` (new data).
@@ -204,7 +188,6 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
   ```
 
 - **Stale-While-Revalidate**:
-
   ```bash
   http://localhost:3000/data?id=123&cache-control=stale-while-revalidate=10,max-age=10
   ```
@@ -240,7 +223,3 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
 - Leader–follower pattern ensures efficient concurrent request handling.
 - ETag generation hashes only `updated_at` for performance.
 - This is a **learning project**, so expect some rough edges—perfect for tinkering!
-
-```
-
-```
