@@ -203,7 +203,6 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
   ![Cache Miss](assets/cache_miss.png)
 
 - **Demo Video**: Watch the reverse proxy handle requests and caching.
-  [View reverse_proxy.mp4](assets/reverse_proxy_demo.mp4)
 
 ---
 
@@ -213,6 +212,8 @@ This is a toy project to explore how a **reverse proxy** works, complete with HT
 - Implement advanced eviction policies (e.g., LRU, LFU).
 - Expand the mock server for more complex origin behaviors.
 - Add monitoring for cache hit/miss rates and origin health.
+https://github.com/user-attachments/assets/9482d48e-6676-4446-836c-b7775523a65d
+
 
 ---
 
